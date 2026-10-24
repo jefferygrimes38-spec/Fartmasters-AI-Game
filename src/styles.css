@@ -1,0 +1,659 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+
+const judgeNames = [
+  'Randy Piston',
+  'Daisy Bloat',
+  'Gassy Gus',
+  'Sourdough Sniff',
+  'Lush Lungs',
+  'Crude Comet',
+];
+
+const funnyComments = [
+  'That blast hit the room like a freight train full of hot pickles.',
+  'This one had enough force to wake a sleeping hound and the neighborhood HOA.',
+  'Not a fart so much as a discarded cannonball with a cheese finish.',
+  'The air turned theatrical for a second. The judges were speechless and delighted.',
+  'This was a deeply committed detonation—dramatic, loud, and absolutely unrepentant.',
+  'A perfect mix of thunder, shame, and undeniable chemistry.',
+];
+
+const starterCharacterRoster = [
+  { id: 'squeal', name: 'Squeal Slinger', price: 80, owned: true, accent: 'orange' },
+  { id: 'muffin', name: 'Muffin Mover', price: 120, owned: false, accent: 'red' },
+  { id: 'toot', name: 'Toot Tuba', price: 160, owned: false, accent: 'gold' },
+  { id: 'sour', name: 'Sour Snorkel', price: 220, owned: false, accent: 'chrome' },
+  { id: 'bloom', name: 'Bloom Buzzer', price: 280, owned: false, accent: 'orange' },
+  { id: 'drag', name: 'Drag Strip Diesel', price: 340, owned: false, accent: 'red' },
+];
+
+const packageOptions = [
+  { id: 'starter', label: '5 submissions', price: 5, credits: 5, badge: 'Best value' },
+  { id: 'pro', label: '15 submissions', price: 12, credits: 15, badge: 'Most popular' },
+  { id: 'elite', label: '35 submissions', price: 25, credits: 35, badge: 'Power run' },
+];
+
+const monthlyCompetitions = [
+  { month: 'October 2026', prize: '$2,500', entries: 1842, leader: 'Gassy Gus', theme: 'Deep South Detonation' },
+  { month: 'November 2026', prize: '$3,600', entries: 2126, leader: 'Dorothy Stinkley', theme: 'Midnight Muffler Jam' },
+  { month: 'December 2026', prize: '$5,000', entries: 2988, leader: 'Toot Tuba', theme: 'Holiday Hooter Classic' },
+];
+
+const demoLeaderboard = [
+  {
+    id: 'demo-1',
+    name: 'Lil Squeak',
+    country: 'United States',
+    audioUrl: createDemoAudioUrl(175, 1600),
+    average: 97.41,
+    date: '2026-10-23',
+    commentary: 'A war chest of modern stink. Precision, volume, and pure swagger.',
+  },
+  {
+    id: 'demo-2',
+    name: 'Dora Boff',
+    country: 'Canada',
+    audioUrl: createDemoAudioUrl(210, 1400),
+    average: 95.88,
+    date: '2026-10-22',
+    commentary: 'An elegant rumble with a cholera-chic finish.',
+  },
+  {
+    id: 'demo-3',
+    name: 'Peewee Rattle',
+    country: 'Australia',
+    audioUrl: createDemoAudioUrl(150, 1900),
+    average: 94.61,
+    date: '2026-10-21',
+    commentary: 'A perfectly theatre-sized boom with a comically confident exit.',
+  },
+];
+
+const storageKey = 'fartmasters-ai-game-state';
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function createDemoAudioUrl(frequency, durationMs) {
+  const sampleRate = 44100;
+  const length = Math.floor((sampleRate * durationMs) / 1000);
+  const buffer = new ArrayBuffer(44 + length * 2);
+  const view = new DataView(buffer);
+
+  const writeString = (offset, text) => {
+    for (let i = 0; i < text.length; i += 1) {
+      view.setUint8(offset + i, text.charCodeAt(i));
+    }
+  };
+
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + length * 2, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, 'data');
+  view.setUint32(40, length * 2, true);
+
+  let offset = 44;
+  for (let i = 0; i < length; i += 1) {
+    const t = i / sampleRate;
+    const wave = Math.sin(2 * Math.PI * frequency * t) * 0.6;
+    const noise = (Math.random() - 0.5) * 0.35;
+    const envelope = Math.sin((Math.PI * i) / length);
+    const sample = (wave + noise + 0.2 * Math.sin(2 * Math.PI * (frequency * 0.528) * t)) * envelope;
+    const intSample = clamp(sample * 32767, -32768, 32767);
+    view.setInt16(offset, intSample, true);
+    offset += 2;
+  }
+
+  const blob = new Blob([buffer], { type: 'audio/wav' });
+  return URL.createObjectURL(blob);
+}
+
+function buildJudgingProfile(durationSeconds, energy, intensity) {
+  const superFactor = durationSeconds * 12 + energy * 0.7 + intensity * 0.9;
+
+  const judges = judgeNames.map((name, index) => {
+    const variance = Math.sin((durationSeconds + index) * 4.2 + intensity) * 10;
+    const base = 52 + superFactor * (0.66 + index * 0.055) + variance;
+    const score = clamp(Number(base.toFixed(2)), 41, 99.99);
+    return { name, score };
+  });
+
+  const average = Number(
+    (judges.reduce((sum, judge) => sum + judge.score, 0) / judges.length).toFixed(2),
+  );
+
+  return {
+    judges,
+    average,
+    commentary: funnyComments[Math.floor((average + intensity) % funnyComments.length)],
+  };
+}
+
+function getInitialState() {
+  const saved = localStorage.getItem(storageKey);
+  if (saved) {
+    try {
+      return JSON.parse(saved);
+    } catch {
+      return null;
+    }
+  }
+
+  return {
+    credits: 5,
+    coins: 250,
+    leaderboard: demoLeaderboard,
+    purchases: [],
+    characters: starterCharacterRoster,
+    payments: [
+      { id: 'pkg-1', amount: 5, credits: 5, ts: '2026-10-22T18:10:00Z' },
+    ],
+  };
+}
+
+function formatCurrency(value) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+export default function App() {
+  const initialState = useMemo(() => getInitialState(), []);
+  const [credits, setCredits] = useState(initialState.credits);
+  const [coins, setCoins] = useState(initialState.coins);
+  const [leaderboard, setLeaderboard] = useState(initialState.leaderboard);
+  const [payments, setPayments] = useState(initialState.payments);
+  const [characters, setCharacters] = useState(initialState.characters);
+  const [playerName, setPlayerName] = useState('Big Stink');
+  const [country, setCountry] = useState('United States');
+  const [currentClipUrl, setCurrentClipUrl] = useState('');
+  const [recordingStatus, setRecordingStatus] = useState('Ready to record');
+  const [isRecording, setIsRecording] = useState(false);
+  const [audioDuration, setAudioDuration] = useState(0);
+  const [recentResult, setRecentResult] = useState(null);
+  const [toast, setToast] = useState('');
+  const [ownerPassword, setOwnerPassword] = useState('');
+  const [ownerAccess, setOwnerAccess] = useState(false);
+  const [selectedCharacter, setSelectedCharacter] = useState('Squeal Slinger');
+
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const streamRef = useRef(null);
+
+  useEffect(() => {
+    const payload = { credits, coins, leaderboard, payments, characters };
+    localStorage.setItem(storageKey, JSON.stringify(payload));
+  }, [credits, coins, leaderboard, payments, characters]);
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timer = setTimeout(() => setToast(''), 2200);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+      }
+      if (currentClipUrl) {
+        URL.revokeObjectURL(currentClipUrl);
+      }
+    };
+  }, [currentClipUrl]);
+
+  const totalRevenue = useMemo(
+    () => payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0),
+    [payments],
+  );
+
+  const averageGlobalScore = useMemo(() => {
+    if (!leaderboard.length) return 0;
+    return Number(
+      (leaderboard.reduce((sum, entry) => sum + Number(entry.average || 0), 0) / leaderboard.length).toFixed(2),
+    );
+  }, [leaderboard]);
+
+  async function beginRecording() {
+    if (!navigator.mediaDevices || !window.MediaRecorder) {
+      setToast('Microphone capture is not available in this browser.');
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const recorder = new MediaRecorder(stream);
+      chunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const url = URL.createObjectURL(blob);
+        setCurrentClipUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return url;
+        });
+        const audio = new Audio(url);
+        audio.addEventListener('loadedmetadata', () => {
+          setAudioDuration(Number((audio.duration || 0).toFixed(2)));
+        });
+        stream.getTracks().forEach((track) => track.stop());
+        setRecordingStatus('Recording captured');
+        setToast('Fart captured. Ready to judge.');
+      };
+
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsRecording(true);
+      setRecordingStatus('Recording live…');
+    } catch (error) {
+      console.error(error);
+      setToast('Microphone permission was denied.');
+    }
+  }
+
+  function stopRecording() {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      setRecordingStatus('Finalizing blast…');
+    }
+  }
+
+  function submitFart() {
+    if (!currentClipUrl) {
+      setToast('Capture a recording before submitting.');
+      return;
+    }
+
+    if (credits <= 0) {
+      setToast('No submissions left. Buy more packs to compete.');
+      return;
+    }
+
+    const duration = Number(audioDuration || 1.6);
+    const energy = clamp(Math.round(duration * 22 + (Math.random() * 18 + 18)), 30, 100);
+    const intensity = clamp(Math.round((duration + 1.2) * 24 + Math.random() * 16), 10, 90);
+    const result = buildJudgingProfile(duration, energy, intensity);
+
+    const submission = {
+      id: `sub-${Date.now()}`,
+      name: playerName || 'Big Stink',
+      country: country || 'Unknown',
+      audioUrl: currentClipUrl,
+      average: result.average,
+      date: new Date().toISOString(),
+      commentary: result.commentary,
+      judges: result.judges,
+    };
+
+    setLeaderboard((previous) => [submission, ...previous].sort((a, b) => b.average - a.average).slice(0, 12));
+    setCredits((previous) => previous - 1);
+    setCoins((previous) => previous + 18);
+    setRecentResult(result);
+    setToast('Submission accepted to the World Leaderboard.');
+    setCurrentClipUrl('');
+    setAudioDuration(0);
+  }
+
+  function purchasePackage(option) {
+    setCredits((previous) => previous + option.credits);
+    setPayments((previous) => [
+      ...previous,
+      { id: `pkg-${Date.now()}`, amount: option.price, credits: option.credits, ts: new Date().toISOString() },
+    ]);
+    setToast(`${option.label} added to your account.`);
+  }
+
+  function purchaseCharacter(character) {
+    if (character.owned) {
+      setSelectedCharacter(character.name);
+      setToast(`${character.name} is already equipped.`);
+      return;
+    }
+
+    if (coins < character.price) {
+      setToast('Not enough Gas Bucks for that character.');
+      return;
+    }
+
+    setCoins((previous) => previous - character.price);
+    setCharacters((previous) =>
+      previous.map((item) =>
+        item.id === character.id ? { ...item, owned: true } : item,
+      ),
+    );
+    setSelectedCharacter(character.name);
+    setToast(`${character.name} added to your garage.`);
+  }
+
+  function handleOwnerAccess() {
+    if (ownerPassword === 'MowTownOwner2026') {
+      setOwnerAccess(true);
+      setToast('Owner dashboard unlocked.');
+    } else {
+      setToast('Incorrect access code.');
+    }
+  }
+
+  const topThree = leaderboard.slice(0, 3);
+
+  return (
+    <div className="app-shell">
+      <header className="topbar panel">
+        <div className="brand-block">
+          <div className="brand-mark">FM</div>
+          <div>
+            <p className="eyebrow">MowTown LLC</p>
+            <h1>Fartmasters AI</h1>
+          </div>
+        </div>
+
+        <nav className="nav-links">
+          <a href="#submit">Submit</a>
+          <a href="#leaderboard">Leaderboard</a>
+          <a href="#competitions">Competitions</a>
+          <a href="#store">Store</a>
+        </nav>
+
+        <div className="header-actions">
+          <div className="stat-pill">Credits: <strong>{credits}</strong></div>
+          <button className="ghost-button" onClick={() => setOwnerAccess(false)}>
+            Spectator Mode
+          </button>
+          <button className="ghost-button" onClick={() => setOwnerAccess(true)}>
+            Owner View
+          </button>
+        </div>
+      </header>
+
+      <main className="page-grid">
+        <section className="hero panel">
+          <div className="hero-copy">
+            <p className="eyebrow accent">Global stink rankings</p>
+            <h2>Launch your blast. Earn the crowd. Rule the air.</h2>
+            <p>
+              Record the real fart, let six AI judges score it with ruthless precision, and
+              climb the world leaderboard. Spectators can listen and watch for free. Players
+              submit with paid packs.
+            </p>
+            <div className="hero-actions">
+              <a href="#submit" className="primary-button">Record a Fart</a>
+              <button className="secondary-button">Watch Spectators</button>
+            </div>
+            <div className="kpis">
+              <div>
+                <span>Avg. Global Score</span>
+                <strong>{averageGlobalScore.toFixed(2)}</strong>
+              </div>
+              <div>
+                <span>Live Revenue</span>
+                <strong>{formatCurrency(totalRevenue)}</strong>
+              </div>
+              <div>
+                <span>World Submissions</span>
+                <strong>{leaderboard.length + 1840}</strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="podium panel-inner">
+            <div className="podium-head">
+              <span>Top Toots</span>
+              <span>Live</span>
+            </div>
+
+            {topThree.map((entry, index) => (
+              <div key={entry.id} className={`podium-row rank-${index + 1}`}>
+                <div className="rank-badge">#{index + 1}</div>
+                <div>
+                  <strong>{entry.name}</strong>
+                  <small>{entry.country}</small>
+                </div>
+                <div className="podium-score">{Number(entry.average).toFixed(2)}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section id="submit" className="content-grid">
+          <div className="panel submit-panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow accent">Player submission</p>
+                <h3>Submit your strongest blast</h3>
+              </div>
+              <div className="status signal">{recordingStatus}</div>
+            </div>
+
+            <div className="field-row">
+              <label>
+                Player name
+                <input value={playerName} onChange={(event) => setPlayerName(event.target.value)} />
+              </label>
+              <label>
+                Country
+                <input value={country} onChange={(event) => setCountry(event.target.value)} />
+              </label>
+            </div>
+
+            <div className="record-wrap">
+              <div className="recording-visual">
+                <div className={`pulse ${isRecording ? 'live' : ''}`} />
+              </div>
+
+              <div className="record-buttons">
+                {!isRecording ? (
+                  <button className="primary-button" onClick={beginRecording}>Start Recording</button>
+                ) : (
+                  <button className="secondary-button" onClick={stopRecording}>Stop Recording</button>
+                )}
+                <button className="ghost-button" onClick={() => setCurrentClipUrl('')}>Clear Clip</button>
+              </div>
+            </div>
+
+            {currentClipUrl && (
+              <div className="audio-panel">
+                <audio controls src={currentClipUrl} />
+                <div className="clip-meta">
+                  <span>Clip length</span>
+                  <strong>{audioDuration}s</strong>
+                </div>
+              </div>
+            )}
+
+            <button className="submit-button" onClick={submitFart}>Submit to Judges</button>
+
+            {recentResult && (
+              <div className="judges-panel">
+                {recentResult.judges.map((judge) => (
+                  <div key={judge.name} className="judge-card">
+                    <span>{judge.name}</span>
+                    <strong>{judge.score.toFixed(2)}</strong>
+                  </div>
+                ))}
+                <div className="average-box">
+                  <span>Average</span>
+                  <strong>{recentResult.average.toFixed(2)}</strong>
+                </div>
+                <div className="commentary-box">
+                  <strong>Judge commentary</strong>
+                  <p>{recentResult.commentary}</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <aside className="panel right-rail">
+            <div className="panel-header compact">
+              <div>
+                <p className="eyebrow accent">Purchase packs</p>
+                <h3>Player packages</h3>
+              </div>
+            </div>
+
+            <div className="purchase-list">
+              {packageOptions.map((option) => (
+                <button key={option.id} className="purchase-card" onClick={() => purchasePackage(option)}>
+                  <div>
+                    <span className="badge">{option.badge}</span>
+                    <strong>{option.label}</strong>
+                    <small>{option.credits} submissions</small>
+                  </div>
+                  <span>{formatCurrency(option.price)}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="wallet-card">
+              <span>Gas Bucks</span>
+              <strong>{coins}</strong>
+            </div>
+          </aside>
+        </section>
+
+        <section id="leaderboard" className="panel leaderboard-panel">
+          <div className="panel-header">
+            <div>
+              <p className="eyebrow accent">Worldwide</p>
+              <h3>Leaderboard</h3>
+            </div>
+            <div className="signal">Free spectator access</div>
+          </div>
+
+          <div className="leaderboard-table">
+            {leaderboard.map((entry, index) => (
+              <div key={entry.id} className="leader-row">
+                <div className="leader-rank">#{index + 1}</div>
+                <div className="leader-meta">
+                  <strong>{entry.name}</strong>
+                  <small>{entry.country}</small>
+                </div>
+                <div className="leader-score">{Number(entry.average).toFixed(2)}</div>
+                <div className="leader-commentary">{entry.commentary}</div>
+                {entry.audioUrl && (
+                  <audio controls src={entry.audioUrl} className="mini-audio" />
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section id="competitions" className="panel competition-panel">
+          <div className="panel-header">
+            <div>
+              <p className="eyebrow accent">Monthly</p>
+              <h3>Competitions</h3>
+            </div>
+          </div>
+
+          <div className="competition-list">
+            {monthlyCompetitions.map((item) => (
+              <div key={item.month} className="competition-card">
+                <div>
+                  <span className="badge dark">{item.theme}</span>
+                  <h4>{item.month}</h4>
+                </div>
+                <div className="competition-stats">
+                  <span>{item.entries} entries</span>
+                  <span>{item.prize}</span>
+                </div>
+                <small>Current leader: {item.leader}</small>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section id="store" className="panel store-panel">
+          <div className="panel-header">
+            <div>
+              <p className="eyebrow accent">Character garage</p>
+              <h3>Store</h3>
+            </div>
+            <div className="wallet-card mini">
+              <span>Gas Bucks</span>
+              <strong>{coins}</strong>
+            </div>
+          </div>
+
+          <div className="store-grid">
+            {characters.map((character) => (
+              <div key={character.id} className={`store-card ${selectedCharacter === character.name ? 'active' : ''}`}>
+                <div className={`store-avatar ${character.accent}`} />
+                <h4>{character.name}</h4>
+                <p>Custom paint, swagger, and chaos.</p>
+                <div className="store-row">
+                  <span>{character.owned ? 'Owned' : `${character.price} Gas Bucks`}</span>
+                  <button className="small-button" onClick={() => purchaseCharacter(character)}>
+                    {character.owned ? 'Equip' : 'Buy'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {ownerAccess && (
+          <section className="panel owner-panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow accent">Private dashboard</p>
+                <h3>Owner access</h3>
+              </div>
+              <button className="ghost-button" onClick={() => setOwnerAccess(false)}>Close</button>
+            </div>
+
+            <div className="owner-input-block">
+              <input
+                type="password"
+                placeholder="Access code"
+                value={ownerPassword}
+                onChange={(event) => setOwnerPassword(event.target.value)}
+              />
+              <button className="primary-button" onClick={handleOwnerAccess}>Unlock</button>
+            </div>
+
+            {ownerAccess && (
+              <div className="owner-stats">
+                <div className="owner-card">
+                  <span>Total revenue</span>
+                  <strong>{formatCurrency(totalRevenue)}</strong>
+                </div>
+                <div className="owner-card">
+                  <span>Top score</span>
+                  <strong>{Math.max(...leaderboard.map((entry) => entry.average)).toFixed(2)}</strong>
+                </div>
+                <div className="owner-card">
+                  <span>Submissions</span>
+                  <strong>{leaderboard.length}</strong>
+                </div>
+                <div className="owner-card">
+                  <span>Active players</span>
+                  <strong>{new Set(leaderboard.map((entry) => entry.country)).size}</strong>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+      </main>
+
+      {toast && <div className="toast">{toast}</div>}
+    </div>
+  );
+}
